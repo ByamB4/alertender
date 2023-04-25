@@ -3,7 +3,8 @@ from requests import get
 import json
 from lxml import html
 from datetime import datetime, timedelta
-import discord, os
+import discord
+import os
 from typing import List, Tuple
 from dotenv import load_dotenv
 
@@ -11,11 +12,11 @@ from dotenv import load_dotenv
 class AlerTender:
     URL: str = 'https://www.tender.gov.mn/mn/invitation'
     CONFIG_FILE: str = 'config.json'
-    CONFIG: dict = {}
-    UPLOADED: list = []
 
     def __init__(self) -> None:
         load_dotenv()
+        self.UPLOADED: List[str] = []
+        self.CONFIG: dict = {}
         self.read_config()
         for page in itertools.count(1):
             tree = html.fromstring(
@@ -25,7 +26,8 @@ class AlerTender:
         self.write_config()
 
     def read_config(self) -> None:
-        with open(self.CONFIG_FILE, 'r') as f: self.CONFIG = json.load(f)
+        with open(self.CONFIG_FILE, 'r') as f:
+            self.CONFIG = json.load(f)
 
     def write_config(self) -> None:
         self.CONFIG['uploaded'] += self.UPLOADED
@@ -39,10 +41,9 @@ class AlerTender:
                     ".//div[@class='date']")[0].text_content().strip()
                 _id = tender.xpath(
                     ".//a[@class='tender-name']")[0].get('href').split('/')[-1]
-
                 # imagine script runs every day so you can `datetime.now().day - 1` -5 is just in case
                 if datetime.strptime(_date, '%Y-%m-%d') < datetime.now() - timedelta(days=5):
-                    print('Breaking')
+                    print(f"[*] Checked until: {datetime.strptime(_date, '%Y-%m-%d')}")
                     return True
                 if _id in self.CONFIG['uploaded']:
                     continue
@@ -59,16 +60,19 @@ class AlerTender:
                         "//div[@class='tender-info-detail']//div[6]")[0].text_content().split())
                     self.discord_log(
                         f"{self.URL}/detail/{_id}",
-                        f"[+] Гарчиг     : {title}\n[+] Үнэ        : {price}\n[+] Түлхүүр үг : {','.join(keywords)}\n{content}"
+                        f"[+] Title: {title}\n[+] Price: {price}\n[+] Keywords: {','.join(keywords)}\n{content}"
                     )
                     self.UPLOADED.append(_id)
             except Exception as e:
+                # well this branch not really happens just in case
+                print(f'[-] Error: {e}')
                 self.discord_log('ERROR', e)
                 return True
         return False
 
     def check_content(self, content) -> Tuple[bool, List[str]]:
-        keywords = [keyword for keyword in self.CONFIG['keywords'] if keyword in content]
+        keywords = [keyword for keyword in self.CONFIG['keywords']
+                    if keyword in content]
         return bool(keywords), keywords
 
     # you can update your logging logic
